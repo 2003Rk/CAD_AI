@@ -9,6 +9,10 @@ on:
       - "v*.*.*"
   workflow_dispatch:
 
+# Required so the workflow can create GitHub Releases and upload assets.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
