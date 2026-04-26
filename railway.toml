@@ -1,0 +1,7 @@
+[build]
+dockerfilePath = "Dockerfile.api"
+
+[deploy]
+startCommand = "uvicorn src.api:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/health"
+restartPolicyType = "on_failure"
