@@ -29,6 +29,9 @@ env/
 .DS_Store
 Thumbs.db
 
+# Credentials (never commit secrets)
+credentials/*.json
+
 # Generated data (large files)
 data/images/
 data/generated/

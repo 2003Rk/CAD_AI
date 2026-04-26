@@ -1,0 +1,67 @@
+# Render Blueprint — CAD AI Eval
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Deploys two services:
+#   1. cad-eval-api    — FastAPI backend (Docker)
+#   2. cad-eval-frontend — Static HTML frontend
+#
+# Quick-start:
+#   1. Push this repo to GitHub / GitLab.
+#   2. In Render Dashboard → "New Blueprint" → select this repo.
+#   3. Set the GEMINI_API_KEY secret when prompted.
+#   4. After both services are live, copy the frontend URL
+#      (e.g. https://cad-eval-frontend.onrender.com) and set
+#      CORS_ORIGINS on the API service to that value.
+#   5. In the frontend UI, enter your API URL
+#      (e.g. https://cad-eval-api.onrender.com) and click Save.
+
+services:
+
+  # ── FastAPI backend ──────────────────────────────────────────────────────
+  - type: web
+    name: cad-eval-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.api
+    dockerContext: .
+    healthCheckPath: /health
+    # Render free tier spins down after inactivity; upgrade to "starter" or
+    # higher for always-on behaviour and persistent disk support.
+    # plan: starter
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false          # you will be prompted to set this in the dashboard
+
+      # After the frontend is deployed, replace "*" with its Render URL, e.g.:
+      #   https://cad-eval-frontend.onrender.com
+      - key: CORS_ORIGINS
+        value: "*"
+
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+
+      - key: MAX_RETRIES
+        value: "3"
+
+      - key: REQUEST_TIMEOUT_MS
+        value: "120000"
+
+      - key: INTER_REQUEST_DELAY
+        value: "1.0"
+
+    # Persistent disk for generated DXF, images, and reports.
+    # Requires a paid Render plan (starter+). Remove this block on free tier.
+    disk:
+      name: cad-eval-data
+      mountPath: /app/data
+      sizeGB: 1
+
+  # ── Static frontend ──────────────────────────────────────────────────────
+  - type: web
+    name: cad-eval-frontend
+    runtime: static
+    buildCommand: ""            # nothing to build — it's plain HTML
+    staticPublishPath: ./frontend
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
