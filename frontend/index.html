@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CAD AI Evaluation Runner</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --ink: #10243e;
+      --muted: #5f7087;
+      --brand: #0f5ea8;
+      --brand-2: #1890d8;
+      --ok: #177245;
+      --err: #b3261e;
+      --line: #d9e2ec;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(1200px 600px at 20% -10%, #e3f0ff, transparent), var(--bg);
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 24px auto;
+      padding: 0 16px;
+      display: grid;
+      gap: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 6px 20px rgba(16, 36, 62, 0.06);
+      padding: 16px;
+    }
+    h1 { margin: 0 0 6px; font-size: 24px; }
+    .sub { color: var(--muted); margin: 0; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+    label { display: block; font-weight: 600; margin-bottom: 6px; }
+    select, input, button {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 14px;
+      background: #fff;
+    }
+    .btn {
+      background: linear-gradient(120deg, var(--brand), var(--brand-2));
+      color: #fff;
+      border: none;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-sm {
+      width: auto;
+      min-height: 32px;
+      padding: 4px 12px;
+      font-size: 13px;
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .status.idle   { color: var(--muted); }
+    .status.running { color: var(--brand); }
+    .status.success { color: var(--ok); }
+    .status.error   { color: var(--err); }
+    .progress-wrap { margin-top: 12px; }
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .progress-track {
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      background: #e7eef6;
+      overflow: hidden;
+      border: 1px solid var(--line);
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      transition: width 0.3s ease;
+      background: linear-gradient(120deg, var(--brand), var(--brand-2));
+    }
+    pre {
+      margin: 0;
+      padding: 12px;
+      border-radius: 10px;
+      background: #0f1722;
+      color: #cdd8e7;
+      border: 1px solid #25374f;
+      min-height: 320px;
+      max-height: 55vh;
+      overflow: auto;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .links a {
+      color: var(--brand);
+      text-decoration: none;
+      font-weight: 600;
+      margin-right: 12px;
+    }
+    .links a:hover { text-decoration: underline; }
+    .backend-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    .backend-row input { flex: 1; }
+    .err-msg { color: var(--err); font-size: 12px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- Header -->
+    <section class="card">
+      <h1>CAD AI Evaluation Runner</h1>
+      <p class="sub">One-click pipeline: dataset generation → DXF conversion → Gemini CAD generation → scoring → reports.</p>
+    </section>
+
+    <!-- Backend URL config -->
+    <section class="card">
+      <label for="backendUrl">Backend URL</label>
+      <div class="backend-row">
+        <input id="backendUrl" type="url" placeholder="http://localhost:8000" />
+        <button class="btn btn-sm" onclick="saveBackendUrl()">Save</button>
+        <button class="btn btn-sm" style="background:var(--muted)" onclick="testBackend()">Test</button>
+      </div>
+      <div id="backendMsg" class="err-msg"></div>
+    </section>
+
+    <!-- Controls -->
+    <section class="card">
+      <div class="grid">
+        <div>
+          <label for="pattern">Prompt Pattern</label>
+          <select id="pattern">
+            <option value="all" selected>All (1 + 2 + 3)</option>
+            <option value="1">Pattern 1</option>
+            <option value="2">Pattern 2</option>
+            <option value="3">Pattern 3</option>
+          </select>
+        </div>
+        <div>
+          <button id="startBtn" class="btn" onclick="startRun()">Start Pipeline</button>
+        </div>
+        <div>
+          <span id="statusEl" class="status idle">Idle</span>
+        </div>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-meta">
+          <span id="progressLabel">Not started</span>
+          <span id="progressPct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div id="progressBar" class="progress-fill"></div>
+        </div>
+        <div id="uiMessage" class="err-msg"></div>
+      </div>
+    </section>
+
+    <!-- Report links -->
+    <section class="card">
+      <div class="links">
+        <a id="linkHtml" href="#" target="_blank">Open HTML Report</a>
+        <a id="linkJson" href="#" target="_blank">Download JSON Report</a>
+        <a id="linkXlsx" href="#" target="_blank">Download Excel Report</a>
+      </div>
+    </section>
+
+    <!-- Live logs -->
+    <section class="card">
+      <h3 style="margin-top:0">Live Logs</h3>
+      <pre id="logs"></pre>
+    </section>
+
+  </div>
+
+  <script>
+    // ---- Backend URL ----
+    // When served via Docker Compose (nginx proxies /api/* to the API container),
+    // leave this empty so requests use the same origin.
+    // When running the frontend standalone, set this to http://your-backend-host:8000.
+    const STORAGE_KEY  = 'cad_eval_backend_url';
+    const DEFAULT_URL  = '';   // empty = same origin (works with Docker Compose nginx proxy)
+
+    function getBackendUrl() {
+      return (localStorage.getItem(STORAGE_KEY) || DEFAULT_URL).replace(/\/$/, '');
+    }
+
+    function saveBackendUrl() {
+      const val = document.getElementById('backendUrl').value.trim().replace(/\/$/, '');
+      if (!val) return;
+      localStorage.setItem(STORAGE_KEY, val);
+      updateReportLinks(val);
+      document.getElementById('backendMsg').textContent = 'Saved.';
+      setTimeout(() => document.getElementById('backendMsg').textContent = '', 2000);
+    }
+
+    async function testBackend() {
+      const url = document.getElementById('backendUrl').value.trim().replace(/\/$/, '') || getBackendUrl();
+      const msg = document.getElementById('backendMsg');
+      try {
+        const res = await fetch(`${url}/health`, { cache: 'no-store' });
+        if (res.ok) {
+          msg.style.color = 'var(--ok)';
+          msg.textContent = 'Connected successfully.';
+        } else {
+          msg.style.color = 'var(--err)';
+          msg.textContent = `Backend returned HTTP ${res.status}.`;
+        }
+      } catch {
+        msg.style.color = 'var(--err)';
+        msg.textContent = 'Could not reach backend. Check the URL and make sure the server is running.';
+      }
+      setTimeout(() => { msg.textContent = ''; msg.style.color = ''; }, 4000);
+    }
+
+    function updateReportLinks(base) {
+      document.getElementById('linkHtml').href  = `${base}/reports/html`;
+      document.getElementById('linkJson').href  = `${base}/reports/json`;
+      document.getElementById('linkXlsx').href  = `${base}/reports/xlsx`;
+    }
+
+    // ---- Status helpers ----
+    const STATUS_LABELS = { idle: 'Idle', running: 'Running', success: 'Success', error: 'Error' };
+    const STAGE_LABELS  = {
+      idle: 'Idle', starting: 'Starting', dataset: 'Generating Dataset',
+      convert: 'Converting Images', generate: 'Generating CAD', evaluate: 'Evaluating',
+      compare: 'Comparing', reports: 'Building Reports', done: 'Done',
+    };
+
+    function setStatus(status) {
+      const el = document.getElementById('statusEl');
+      el.className = `status ${status}`;
+      el.textContent = STATUS_LABELS[status] || status;
+    }
+
+    // ---- Pipeline control ----
+    async function startRun() {
+      const backend = getBackendUrl();
+      const pattern = document.getElementById('pattern').value;
+      const msg = document.getElementById('uiMessage');
+      msg.textContent = '';
+      setStatus('running');
+      document.getElementById('startBtn').disabled = true;
+      document.getElementById('progressLabel').textContent = 'Starting — request accepted';
+
+      try {
+        const res = await fetch(`${backend}/api/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          body: JSON.stringify({ pattern }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setStatus('idle');
+          document.getElementById('startBtn').disabled = false;
+          msg.textContent = data.detail || data.error || 'Could not start pipeline.';
+          return;
+        }
+      } catch {
+        setStatus('error');
+        document.getElementById('startBtn').disabled = false;
+        msg.textContent = 'Failed to reach backend. Check the Backend URL above.';
+        return;
+      }
+      poll();
+    }
+
+    async function poll() {
+      const backend = getBackendUrl();
+      try {
+        const res  = await fetch(`${backend}/api/status`, { cache: 'no-store' });
+        const data = await res.json();
+        document.getElementById('uiMessage').textContent = '';
+        setStatus(data.status);
+
+        const logs = document.getElementById('logs');
+        logs.textContent = (data.logs || []).join('\n');
+        logs.scrollTop = logs.scrollHeight;
+
+        document.getElementById('startBtn').disabled = data.status === 'running';
+
+        const p      = data.progress || {};
+        const pct    = typeof p.percent === 'number' ? p.percent : 0;
+        const bar    = document.getElementById('progressBar');
+        bar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+        document.getElementById('progressPct').textContent = `${pct.toFixed(1)}%`;
+
+        const stage     = p.stage || 'idle';
+        const current   = p.current || 0;
+        const total     = p.count_total || 0;
+        const countText = total > 0 ? ` (${current}/${total})` : '';
+        const detail    = p.detail ? ` — ${p.detail}` : '';
+        document.getElementById('progressLabel').textContent =
+          `${STAGE_LABELS[stage] || stage}${countText}${detail}`;
+
+      } catch {
+        setStatus('error');
+        document.getElementById('uiMessage').textContent =
+          'Lost connection to backend. Check that the server is still running.';
+      }
+    }
+
+    // ---- Boot ----
+    (function init() {
+      const url = getBackendUrl();
+      document.getElementById('backendUrl').value = url;
+      updateReportLinks(url);
+      setInterval(poll, 1500);
+      poll();
+    })();
+  </script>
+</body>
+</html>

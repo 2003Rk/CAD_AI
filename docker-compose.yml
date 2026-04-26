@@ -1,0 +1,48 @@
+services:
+
+  # ── FastAPI backend ──────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: cad-eval-api:latest
+    restart: unless-stopped
+    env_file:
+      # Copy .env.example → .env and add your GEMINI_API_KEY before starting.
+      - .env
+    environment:
+      # Restrict CORS to the nginx frontend when running via Compose.
+      # Override with your public domain when deploying to a server.
+      CORS_ORIGINS: "http://localhost"
+    volumes:
+      # Persist generated DXF files, images, and reports across restarts.
+      - cad_data:/app/data
+      - cad_output:/app/output
+    # The API is only reachable internally via the nginx proxy,
+    # not exposed on the host directly. Remove the comment below
+    # if you want direct host access (e.g. for local testing / Swagger UI).
+    # ports:
+    #   - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ── nginx frontend ───────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: cad-eval-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  cad_data:
+  cad_output:
