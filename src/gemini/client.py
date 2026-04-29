@@ -25,7 +25,7 @@ class GeminiCADClient:
         settings = get_settings()
         self._api_key = api_key or settings.gemini_api_key
         self._model = model or settings.gemini_model
-        self._model_fallbacks = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"]
+        self._model_fallbacks = ["gemini-2.0-flash-lite", "gemini-flash-latest"]
         self._max_retries = settings.max_retries
         self._retry_delay = settings.retry_delay
         self._max_quota_backoff_seconds = settings.max_quota_backoff_seconds
