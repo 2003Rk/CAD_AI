@@ -143,11 +143,15 @@ def _run_pipeline_worker(pattern: str, skip_dataset: bool, skip_convert: bool) -
                 raise InterruptedError("Pipeline stopped by user")
             _STATE.set_progress(event)
 
+        def _should_stop() -> bool:
+            return _STATE.stop_event.is_set()
+
         with redirect_stdout(collector), redirect_stderr(collector):
             run_full_pipeline(
                 pattern_ids=pattern_ids,
                 skip_dataset=skip_dataset,
                 skip_convert=skip_convert,
+                should_stop=_should_stop,
                 progress_callback=_progress_cb,
             )
         if _STATE.stop_event.is_set():

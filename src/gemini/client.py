@@ -7,6 +7,7 @@ import re
 import time
 import traceback
 from pathlib import Path
+from typing import Callable
 
 from google import genai
 from google.genai import types
@@ -45,7 +46,8 @@ class GeminiCADClient:
         prompt_pattern: PromptPattern,
         output_dxf_path: Path,
         image_description: str = "",
-    ) -> GenerationResult:
+        should_stop: Callable[[], bool] | None = None,
+    ) -> "GenerationResult":
         """Send image to Gemini, extract code, execute it to produce DXF.
 
         Returns a GenerationResult with status details.
@@ -72,6 +74,15 @@ class GeminiCADClient:
             except Exception as exc:
                 logger.warning("Upload attempt %d failed: %s", attempt, exc)
                 if attempt < self._max_retries:
+                    if should_stop and should_stop():
+                        return GenerationResult(
+                            success=False,
+                            image_path=image_path,
+                            output_path=output_dxf_path,
+                            pattern=prompt_pattern,
+                            raw_response="",
+                            error="Stopped by user",
+                        )
                     backoff = _compute_retry_backoff(
                         attempt=attempt,
                         exc=exc,
@@ -148,6 +159,15 @@ class GeminiCADClient:
                         continue
                 logger.warning("Attempt %d failed: %s", attempt, exc)
                 if attempt < self._max_retries:
+                    if should_stop and should_stop():
+                        return GenerationResult(
+                            success=False,
+                            image_path=image_path,
+                            output_path=output_dxf_path,
+                            pattern=prompt_pattern,
+                            raw_response="",
+                            error="Stopped by user",
+                        )
                     backoff = _compute_retry_backoff(
                         attempt=attempt,
                         exc=exc,

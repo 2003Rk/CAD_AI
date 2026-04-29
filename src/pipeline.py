@@ -26,6 +26,7 @@ def run_full_pipeline(
     skip_dataset: bool = False,
     skip_convert: bool = False,
     progress_callback: Callable[[dict], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> Path:
     """Execute the complete evaluation pipeline.
 
@@ -123,6 +124,8 @@ def run_full_pipeline(
 
         for pattern in patterns:
             for img_path in images:
+                if should_stop and should_stop():
+                    raise InterruptedError("Pipeline stopped by user")
                 stem = img_path.stem
                 ref_dxf = ref_map.get(stem)
 
@@ -133,6 +136,7 @@ def run_full_pipeline(
                 try:
                     gen_result = client.generate_cad_from_image(
                         img_path, pattern, out_dxf,
+                        should_stop=should_stop,
                     )
                 except Exception as exc:
                     logger.exception("Generation crashed for %s P%s", stem, pattern.id)
