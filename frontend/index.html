@@ -236,8 +236,9 @@
             <option value="3">パターン 3</option>
           </select>
         </div>
-        <div>
+        <div style="display:flex;gap:8px;">
           <button id="startBtn" class="btn" onclick="startRun()">パイプライン開始</button>
+          <button id="stopBtn" class="btn" style="background:linear-gradient(120deg,#b3261e,#e05c55);display:none" onclick="stopRun()">停止</button>
         </div>
         <div>
           <span id="statusEl" class="status idle">待機中</span>
@@ -388,8 +389,7 @@
       const msg = document.getElementById('uiMessage');
       msg.textContent = '';
       setStatus('running');
-      document.getElementById('startBtn').disabled = true;
-      document.getElementById('progressLabel').textContent = '開始中 — リクエスト受付済み';
+      document.getElementById('startBtn').disabled = true;      document.getElementById('stopBtn').style.display = 'inline-flex';      document.getElementById('progressLabel').textContent = '開始中 — リクエスト受付済み';
 
       try {
         const res = await fetch(`${backend}/api/start`, {
@@ -402,16 +402,31 @@
         if (!res.ok) {
           setStatus('idle');
           document.getElementById('startBtn').disabled = false;
+          document.getElementById('stopBtn').style.display = 'none';
           msg.textContent = data.detail || data.error || 'パイプラインを開始できませんでした。';
           return;
         }
       } catch {
         setStatus('error');
         document.getElementById('startBtn').disabled = false;
+        document.getElementById('stopBtn').style.display = 'none';
         msg.textContent = 'バックエンドに接続できませんでした。上記のバックエンドURLを確認してください。';
         return;
       }
       poll();
+    }
+
+    async function stopRun() {
+      const backend = getBackendUrl();
+      document.getElementById('stopBtn').disabled = true;
+      try {
+        await fetch(`${backend}/api/stop`, {
+          method: 'POST',
+          headers: authHeaders(),
+          cache: 'no-store',
+        });
+      } catch { /* ignore */ }
+      document.getElementById('stopBtn').disabled = false;
     }
 
     async function poll() {
@@ -427,6 +442,7 @@
         logs.scrollTop = logs.scrollHeight;
 
         document.getElementById('startBtn').disabled = data.status === 'running';
+        document.getElementById('stopBtn').style.display = data.status === 'running' ? 'inline-flex' : 'none';
 
         const p      = data.progress || {};
         const pct    = typeof p.percent === 'number' ? p.percent : 0;

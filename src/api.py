@@ -72,6 +72,7 @@ class _RunState:
         }
     )
     lock: threading.Lock = field(default_factory=threading.Lock)
+    stop_event: threading.Event = field(default_factory=threading.Event)
 
     def append_log(self, text: str) -> None:
         with self.lock:
@@ -138,6 +139,8 @@ def _run_pipeline_worker(pattern: str, skip_dataset: bool, skip_convert: bool) -
         pattern_ids = None if pattern == "all" else [int(pattern)]
 
         def _progress_cb(event: dict[str, Any]) -> None:
+            if _STATE.stop_event.is_set():
+                raise InterruptedError("Pipeline stopped by user")
             _STATE.set_progress(event)
 
         with redirect_stdout(collector), redirect_stderr(collector):
@@ -147,7 +150,13 @@ def _run_pipeline_worker(pattern: str, skip_dataset: bool, skip_convert: bool) -
                 skip_convert=skip_convert,
                 progress_callback=_progress_cb,
             )
-        _STATE.set_status("success")
+        if _STATE.stop_event.is_set():
+            _STATE.set_status("idle")
+        else:
+            _STATE.set_status("success")
+    except InterruptedError:
+        _STATE.append_log("Pipeline stopped by user.")
+        _STATE.set_status("idle")
     except Exception:
         _STATE.append_log(traceback.format_exc())
         _STATE.set_status("error")
@@ -258,6 +267,7 @@ def api_start(body: StartRequest) -> dict[str, Any]:
     with _STATE.lock:
         _STATE.status = "running"
         _STATE.logs = []
+        _STATE.stop_event.clear()
         _STATE.progress = {
             "stage": "starting",
             "detail": "Queued",
@@ -279,6 +289,15 @@ def api_start(body: StartRequest) -> dict[str, Any]:
     ).start()
 
     return {"ok": True, "status": "running"}
+
+
+@app.post("/api/stop")
+def api_stop() -> dict[str, Any]:
+    """Request the running pipeline to stop gracefully."""
+    if _STATE.snapshot()["status"] != "running":
+        raise HTTPException(status_code=409, detail="No pipeline is currently running")
+    _STATE.stop_event.set()
+    return {"ok": True, "detail": "Stop signal sent"}
 
 
 @app.get("/reports/html")
