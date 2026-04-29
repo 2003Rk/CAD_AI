@@ -157,6 +157,13 @@ class GeminiCADClient:
                         )
                         self._model = fallback_model
                         continue
+                if _is_daily_quota_error(exc):
+                    logger.error("Daily free-tier quota exhausted — aborting pipeline.")
+                    raise RuntimeError(
+                        "Daily Gemini API quota exhausted (free tier: 20 req/day for gemini-2.5-flash, "
+                        "1500 req/day for gemini-1.5-flash). "
+                        "Enable billing at https://console.cloud.google.com/billing or wait until midnight Pacific time."
+                    ) from exc
                 logger.warning("Attempt %d failed: %s", attempt, exc)
                 if attempt < self._max_retries:
                     if should_stop and should_stop():
@@ -355,6 +362,15 @@ def _is_model_not_found_error(exc: Exception) -> bool:
     """Return True when API says selected model is unavailable for endpoint/method."""
     msg = str(exc).lower()
     return "404" in msg and "not found" in msg and "model" in msg
+
+
+def _is_daily_quota_error(exc: Exception) -> bool:
+    """Return True when the per-day free-tier quota is exhausted.
+
+    Retrying will never succeed until midnight — abort immediately.
+    """
+    msg = str(exc)
+    return "PerDayPer" in msg or "GenerateRequestsPerDay" in msg
 
 
 def _next_fallback_model(current: str, fallback_models: list[str]) -> str | None:

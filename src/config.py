@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     # API
     gemini_api_key: str = Field(default="", description="Google Gemini API key")
-    gemini_model: str = Field(default="gemini-2.5-flash", description="Gemini model name (production-tested)")
+    gemini_model: str = Field(default="gemini-1.5-flash", description="Gemini model name (production-tested)")
 
     # Google Sheets
     google_sheets_credentials: Path = Field(
