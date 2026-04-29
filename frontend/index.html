@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CAD AI Evaluation Runner</title>
+  <title>CAD AI 評価ランナー</title>
   <style>
     :root {
       --bg: #f4f7fb;
@@ -19,7 +19,7 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", "Segoe UI", sans-serif;
       color: var(--ink);
       background: radial-gradient(1200px 600px at 20% -10%, #e3f0ff, transparent), var(--bg);
     }
@@ -136,24 +136,90 @@
     }
     .backend-row input { flex: 1; }
     .err-msg { color: var(--err); font-size: 12px; margin-top: 6px; }
+    /* PIN gate */
+    #pin-gate {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(1200px 600px at 20% -10%, #e3f0ff, transparent), var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    #pin-gate .pin-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 6px 28px rgba(16, 36, 62, 0.12);
+      padding: 36px 32px;
+      width: 340px;
+      text-align: center;
+    }
+    #pin-gate h2 { margin: 0 0 8px; font-size: 22px; }
+    #pin-gate .pin-sub { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+    .pin-input-wrap {
+      position: relative;
+      margin-bottom: 12px;
+    }
+    #pin-input {
+      letter-spacing: 0.25em;
+      font-size: 20px;
+      text-align: center;
+      padding-right: 44px;
+      width: 100%;
+    }
+    #pin-eye {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1;
+      min-height: unset;
+      width: auto;
+    }
+    #pin-eye:hover { color: var(--ink); }
+    #pin-error { color: var(--err); font-size: 12px; margin-top: 10px; min-height: 16px; }
   </style>
 </head>
 <body>
+
+  <!-- PIN gate — hidden by JS once the correct PIN is confirmed -->
+  <div id="pin-gate">
+    <div class="pin-card">
+      <h2>CAD AI 評価ランナー</h2>
+      <p class="pin-sub">アクセスPINを入力してください</p>
+      <div class="pin-input-wrap">
+        <input id="pin-input" type="password" placeholder="PIN"
+               autocomplete="off"
+               onkeydown="if(event.key==='Enter')submitPin()" />
+        <button id="pin-eye" type="button" onclick="togglePinVisibility()" title="パスワードを表示">&#x1F441;</button>
+      </div>
+      <button class="btn" style="width:100%" onclick="submitPin()">アクセス</button>
+      <div id="pin-error"></div>
+    </div>
+  </div>
+
   <div class="wrap">
 
     <!-- Header -->
     <section class="card">
-      <h1>CAD AI Evaluation Runner</h1>
-      <p class="sub">One-click pipeline: dataset generation → DXF conversion → Gemini CAD generation → scoring → reports.</p>
+      <h1>CAD AI 評価ランナー</h1>
+      <p class="sub">ワンクリックパイプライン: データセット生成 → DXF変換 → Gemini CAD生成 → スコアリング → レポート</p>
     </section>
 
     <!-- Backend URL config -->
     <section class="card">
-      <label for="backendUrl">Backend URL</label>
+      <label for="backendUrl">バックエンド URL</label>
       <div class="backend-row">
         <input id="backendUrl" type="url" placeholder="http://localhost:8000" />
-        <button class="btn btn-sm" onclick="saveBackendUrl()">Save</button>
-        <button class="btn btn-sm" style="background:var(--muted)" onclick="testBackend()">Test</button>
+        <button class="btn btn-sm" onclick="saveBackendUrl()">保存</button>
+        <button class="btn btn-sm" style="background:var(--muted)" onclick="testBackend()">テスト</button>
       </div>
       <div id="backendMsg" class="err-msg"></div>
     </section>
@@ -162,24 +228,24 @@
     <section class="card">
       <div class="grid">
         <div>
-          <label for="pattern">Prompt Pattern</label>
+          <label for="pattern">プロンプトパターン</label>
           <select id="pattern">
-            <option value="all" selected>All (1 + 2 + 3)</option>
-            <option value="1">Pattern 1</option>
-            <option value="2">Pattern 2</option>
-            <option value="3">Pattern 3</option>
+            <option value="all" selected>すべて (1 + 2 + 3)</option>
+            <option value="1">パターン 1</option>
+            <option value="2">パターン 2</option>
+            <option value="3">パターン 3</option>
           </select>
         </div>
         <div>
-          <button id="startBtn" class="btn" onclick="startRun()">Start Pipeline</button>
+          <button id="startBtn" class="btn" onclick="startRun()">パイプライン開始</button>
         </div>
         <div>
-          <span id="statusEl" class="status idle">Idle</span>
+          <span id="statusEl" class="status idle">待機中</span>
         </div>
       </div>
       <div class="progress-wrap">
         <div class="progress-meta">
-          <span id="progressLabel">Not started</span>
+          <span id="progressLabel">未開始</span>
           <span id="progressPct">0%</span>
         </div>
         <div class="progress-track">
@@ -192,21 +258,68 @@
     <!-- Report links -->
     <section class="card">
       <div class="links">
-        <a id="linkHtml" href="#" target="_blank">Open HTML Report</a>
-        <a id="linkJson" href="#" target="_blank">Download JSON Report</a>
-        <a id="linkXlsx" href="#" target="_blank">Download Excel Report</a>
+        <a id="linkHtml" href="#" target="_blank">HTMLレポートを開く</a>
+        <a id="linkJson" href="#" target="_blank">JSONレポートをダウンロード</a>
+        <a id="linkXlsx" href="#" target="_blank">Excelレポートをダウンロード</a>
       </div>
     </section>
 
     <!-- Live logs -->
     <section class="card">
-      <h3 style="margin-top:0">Live Logs</h3>
+      <h3 style="margin-top:0">ライブログ</h3>
       <pre id="logs"></pre>
     </section>
 
   </div>
 
   <script>
+    // ---- PIN authentication ----
+    const PIN_KEY = 'cad_eval_pin';
+
+    function getPin() {
+      return sessionStorage.getItem(PIN_KEY) || '';
+    }
+
+    function authHeaders(extra) {
+      return Object.assign({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${getPin()}` }, extra || {});
+    }
+
+    function togglePinVisibility() {
+      const inp = document.getElementById('pin-input');
+      const btn = document.getElementById('pin-eye');
+      if (inp.type === 'password') {
+        inp.type = 'text';
+        btn.innerHTML = '&#x1F648;'; // eye closed
+        btn.title = 'パスワードを隠す';
+      } else {
+        inp.type = 'password';
+        btn.innerHTML = '&#x1F441;'; // eye open
+        btn.title = 'パスワードを表示';
+      }
+    }
+
+    const _CORRECT_PIN = 'CAD9090';
+
+    function submitPin() {
+      const pin   = document.getElementById('pin-input').value.trim();
+      const errEl = document.getElementById('pin-error');
+      errEl.textContent = '';
+      if (!pin) { errEl.textContent = 'PINを入力してください'; return; }
+
+      if (pin !== _CORRECT_PIN) {
+        errEl.textContent = 'PINが正しくありません';
+        document.getElementById('pin-input').value = '';
+        document.getElementById('pin-input').focus();
+        return;
+      }
+
+      sessionStorage.setItem(PIN_KEY, pin);
+      document.getElementById('pin-gate').style.display = 'none';
+      updateReportLinks(getBackendUrl());
+      setInterval(poll, 1500);
+      poll();
+    }
+
     // ---- Backend URL ----
     // When served via Docker Compose (nginx proxies /api/* to the API container),
     // leave this empty so requests use the same origin.
@@ -223,7 +336,7 @@
       if (!val) return;
       localStorage.setItem(STORAGE_KEY, val);
       updateReportLinks(val);
-      document.getElementById('backendMsg').textContent = 'Saved.';
+      document.getElementById('backendMsg').textContent = '保存しました。';
       setTimeout(() => document.getElementById('backendMsg').textContent = '', 2000);
     }
 
@@ -234,30 +347,32 @@
         const res = await fetch(`${url}/health`, { cache: 'no-store' });
         if (res.ok) {
           msg.style.color = 'var(--ok)';
-          msg.textContent = 'Connected successfully.';
+          msg.textContent = '接続に成功しました。';
         } else {
           msg.style.color = 'var(--err)';
-          msg.textContent = `Backend returned HTTP ${res.status}.`;
+          msg.textContent = `バックエンドが HTTP ${res.status} を返しました。`;
         }
       } catch {
         msg.style.color = 'var(--err)';
-        msg.textContent = 'Could not reach backend. Check the URL and make sure the server is running.';
+        msg.textContent = 'バックエンドに接続できません。URLを確認し、サーバーが起動していることを確認してください。';
       }
       setTimeout(() => { msg.textContent = ''; msg.style.color = ''; }, 4000);
     }
 
     function updateReportLinks(base) {
-      document.getElementById('linkHtml').href  = `${base}/reports/html`;
-      document.getElementById('linkJson').href  = `${base}/reports/json`;
-      document.getElementById('linkXlsx').href  = `${base}/reports/xlsx`;
+      const pin = getPin();
+      const q   = pin ? `?pin=${encodeURIComponent(pin)}` : '';
+      document.getElementById('linkHtml').href  = `${base}/reports/html${q}`;
+      document.getElementById('linkJson').href  = `${base}/reports/json${q}`;
+      document.getElementById('linkXlsx').href  = `${base}/reports/xlsx${q}`;
     }
 
     // ---- Status helpers ----
-    const STATUS_LABELS = { idle: 'Idle', running: 'Running', success: 'Success', error: 'Error' };
+    const STATUS_LABELS = { idle: '待機中', running: '実行中', success: '成功', error: 'エラー' };
     const STAGE_LABELS  = {
-      idle: 'Idle', starting: 'Starting', dataset: 'Generating Dataset',
-      convert: 'Converting Images', generate: 'Generating CAD', evaluate: 'Evaluating',
-      compare: 'Comparing', reports: 'Building Reports', done: 'Done',
+      idle: '待機中', starting: '開始中', dataset: 'データセット生成中',
+      convert: '画像変換中', generate: 'CAD生成中', evaluate: '評価中',
+      compare: '比較中', reports: 'レポート作成中', done: '完了',
     };
 
     function setStatus(status) {
@@ -274,12 +389,12 @@
       msg.textContent = '';
       setStatus('running');
       document.getElementById('startBtn').disabled = true;
-      document.getElementById('progressLabel').textContent = 'Starting — request accepted';
+      document.getElementById('progressLabel').textContent = '開始中 — リクエスト受付済み';
 
       try {
         const res = await fetch(`${backend}/api/start`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(),
           cache: 'no-store',
           body: JSON.stringify({ pattern }),
         });
@@ -287,13 +402,13 @@
         if (!res.ok) {
           setStatus('idle');
           document.getElementById('startBtn').disabled = false;
-          msg.textContent = data.detail || data.error || 'Could not start pipeline.';
+          msg.textContent = data.detail || data.error || 'パイプラインを開始できませんでした。';
           return;
         }
       } catch {
         setStatus('error');
         document.getElementById('startBtn').disabled = false;
-        msg.textContent = 'Failed to reach backend. Check the Backend URL above.';
+        msg.textContent = 'バックエンドに接続できませんでした。上記のバックエンドURLを確認してください。';
         return;
       }
       poll();
@@ -302,7 +417,7 @@
     async function poll() {
       const backend = getBackendUrl();
       try {
-        const res  = await fetch(`${backend}/api/status`, { cache: 'no-store' });
+        const res  = await fetch(`${backend}/api/status`, { cache: 'no-store', headers: { 'Authorization': `Bearer ${getPin()}` } });
         const data = await res.json();
         document.getElementById('uiMessage').textContent = '';
         setStatus(data.status);
@@ -330,7 +445,7 @@
       } catch {
         setStatus('error');
         document.getElementById('uiMessage').textContent =
-          'Lost connection to backend. Check that the server is still running.';
+          'バックエンドへの接続が切断されました。サーバーが起動していることを確認してください。';
       }
     }
 
@@ -338,9 +453,16 @@
     (function init() {
       const url = getBackendUrl();
       document.getElementById('backendUrl').value = url;
-      updateReportLinks(url);
-      setInterval(poll, 1500);
-      poll();
+
+      if (getPin()) {
+        // Already authenticated this session — skip the PIN gate
+        document.getElementById('pin-gate').style.display = 'none';
+        updateReportLinks(url);
+        setInterval(poll, 1500);
+        poll();
+      }
+      // If not authenticated, the PIN gate overlay remains visible.
+      // Polling starts after a successful PIN entry via submitPin().
     })();
   </script>
 </body>

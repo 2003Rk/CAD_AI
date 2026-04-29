@@ -14,6 +14,7 @@ Environment variables:
 
 from __future__ import annotations
 
+import hmac
 import os
 import re
 import threading
@@ -23,9 +24,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from src.config import get_settings
@@ -171,6 +172,45 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+
+# ---------------------------------------------------------------------------
+# PIN authentication middleware
+# Set ACCESS_PIN env var to override. Railway health probes bypass the check.
+# ---------------------------------------------------------------------------
+
+_ACCESS_PIN: str = os.getenv("ACCESS_PIN", "CAD9090")
+
+
+@app.middleware("http")
+async def _pin_auth_middleware(request: Request, call_next):  # type: ignore[misc]
+    """Reject requests that do not carry the correct access PIN.
+
+    Accepted forms:
+      - Authorization: Bearer <pin>   (API calls from the frontend)
+      - ?pin=<pin>                     (direct browser links, e.g. report downloads)
+
+    The Railway health-check path /health is always allowed through.
+    """
+    if request.url.path == "/health":
+        return await call_next(request)
+
+    auth_header = request.headers.get("Authorization", "")
+    provided = (
+        auth_header[7:]
+        if auth_header.startswith("Bearer ")
+        else request.query_params.get("pin", "")
+    )
+
+    # hmac.compare_digest prevents timing-based PIN enumeration
+    if _ACCESS_PIN and hmac.compare_digest(provided, _ACCESS_PIN):
+        return await call_next(request)
+
+    return JSONResponse(
+        status_code=401,
+        content={"detail": "Unauthorized — valid PIN required"},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 # ---------------------------------------------------------------------------
