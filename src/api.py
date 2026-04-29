@@ -161,6 +161,9 @@ def _run_pipeline_worker(pattern: str, skip_dataset: bool, skip_convert: bool) -
     except InterruptedError:
         _STATE.append_log("Pipeline stopped by user.")
         _STATE.set_status("idle")
+    except RuntimeError as exc:
+        _STATE.append_log(f"Pipeline aborted: {exc}")
+        _STATE.set_status("error")
     except Exception:
         _STATE.append_log(traceback.format_exc())
         _STATE.set_status("error")

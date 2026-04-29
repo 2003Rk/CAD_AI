@@ -139,6 +139,9 @@ def run_full_pipeline(
                         should_stop=should_stop,
                     )
                 except Exception as exc:
+                    # Daily quota exhaustion is fatal — stop the entire pipeline
+                    if "Daily Gemini API quota exhausted" in str(exc) or "PerDayPer" in str(exc):
+                        raise
                     logger.exception("Generation crashed for %s P%s", stem, pattern.id)
                     all_results.append(
                         {
