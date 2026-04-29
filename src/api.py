@@ -205,7 +205,8 @@ async def _pin_auth_middleware(request: Request, call_next):  # type: ignore[mis
 
     The Railway health-check path /health is always allowed through.
     """
-    if request.url.path == "/health":
+    # Always allow health checks and CORS preflight requests
+    if request.url.path == "/health" or request.method == "OPTIONS":
         return await call_next(request)
 
     auth_header = request.headers.get("Authorization", "")
