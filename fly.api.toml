@@ -1,0 +1,41 @@
+# Fly.io config for the CAD Eval FastAPI backend
+# App name must be globally unique on Fly.io.
+# Change "cad-eval-api" below if it's already taken:
+#   fly apps create <your-unique-name> --config fly.api.toml
+
+app            = "cad-eval-api"
+primary_region = "iad"          # change to the region closest to you
+
+[build]
+  dockerfile = "Dockerfile.api"
+
+[env]
+  # After the frontend is deployed, replace "*" with its Fly URL, e.g.:
+  #   CORS_ORIGINS = "https://cad-eval-frontend.fly.dev"
+  CORS_ORIGINS         = "*"
+  GEMINI_MODEL         = "gemini-2.5-flash"
+  MAX_RETRIES          = "3"
+  REQUEST_TIMEOUT_MS   = "120000"
+  INTER_REQUEST_DELAY  = "1.0"
+  # GEMINI_API_KEY is set as a secret (never put it here):
+  #   fly secrets set GEMINI_API_KEY=your-key --app cad-eval-api
+
+[http_service]
+  internal_port       = 8000
+  force_https         = true
+  auto_stop_machines  = true   # free-tier: spins down when idle
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval     = "15s"
+    method       = "GET"
+    path         = "/health"
+    timeout      = "5s"
+    type         = "http"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus     = 1
+  memory   = "1gb"

@@ -1,7 +1,12 @@
 [build]
+builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.api"
 
 [deploy]
-startCommand = "uvicorn src.api:app --host 0.0.0.0 --port $PORT"
+# sh -c is parsed by Railway as ["sh", "-c", "uvicorn ... --port $PORT"]
+# so the shell expands $PORT correctly.
+startCommand = 'sh -c "uvicorn src.api:app --host 0.0.0.0 --port $PORT"'
 healthcheckPath = "/health"
+healthcheckTimeout = 30
 restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

@@ -29,6 +29,10 @@ COPY pyproject.toml README.md ./
 
 RUN pip install --no-cache-dir -e .
 
+# Startup script (ensures $PORT is shell-expanded at runtime)
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
 # Runtime directories
 RUN mkdir -p data/images data/generated output/reports output/comparisons
 
@@ -38,4 +42,6 @@ USER appuser
 
 EXPOSE 8000
 
-CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
+# exec-form ENTRYPOINT pointing to a shell script — Railway cannot override
+# or re-interpret a script path into exec form, so $PORT expands correctly.
+ENTRYPOINT ["/app/start.sh"]

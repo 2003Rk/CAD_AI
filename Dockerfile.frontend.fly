@@ -1,0 +1,12 @@
+FROM nginx:1.27-alpine
+
+# Remove default nginx content
+RUN rm -rf /usr/share/nginx/html/*
+
+# Copy frontend
+COPY frontend/index.html /usr/share/nginx/html/index.html
+
+# Use the Fly.io-specific nginx config (no backend proxy — JS calls API directly)
+COPY nginx.fly.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
