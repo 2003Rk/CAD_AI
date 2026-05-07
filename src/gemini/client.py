@@ -507,12 +507,25 @@ def _preprocess_code(code: str, output_path: str) -> str:
 
 def _validate_code(code: str) -> str | None:
     """Validate generated code before execution. Returns error string or None."""
-    # Require either a runnable function entrypoint or script-style create+save flow.
-    has_entrypoint = ("def generate_dxf" in code) or ("def main" in code)
-    has_script_flow = ("ezdxf.new(" in code) and (".saveas(" in code)
-    if not has_entrypoint and not has_script_flow:
-        return "Missing required function: def generate_dxf(output_path: str) or def main()"
-    
+    # Security: check for forbidden module imports before anything else.
+    _ALLOWED_TOP_MODULES = frozenset({"ezdxf", "math"})
+    for m in re.finditer(r"^\s*import\s+([\w.]+)", code, re.MULTILINE):
+        top = m.group(1).split(".")[0]
+        if top not in _ALLOWED_TOP_MODULES:
+            return f"Import of '{top}' is not allowed"
+    for m in re.finditer(r"^\s*from\s+([\w.]+)\s+import", code, re.MULTILINE):
+        top = m.group(1).split(".")[0]
+        if top not in _ALLOWED_TOP_MODULES:
+            return f"Import of '{top}' is not allowed"
+
+    # Require either a runnable function entrypoint or script-style create+save flow,
+    # but only when the code actually attempts to create a DXF document.
+    if "ezdxf.new(" in code:
+        has_entrypoint = ("def generate_dxf" in code) or ("def main" in code)
+        has_script_flow = ".saveas(" in code
+        if not has_entrypoint and not has_script_flow:
+            return "Missing required function: def generate_dxf(output_path: str) or def main()"
+
     # Check for forbidden patterns
     forbidden = [
         ("if __name__", "Contains forbidden if __name__ == '__main__': block"),
