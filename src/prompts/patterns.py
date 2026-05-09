@@ -44,7 +44,9 @@ PATTERN_STRUCTURED = PromptPattern(
         "- NO ezdxf.enums for text alignment (use ints: halign=0, valign=0)\n"
         "- NO hardcoded file paths — ONLY use output_path\n"
         "- NO creating 'Standard' text style (exists by default)\n"
-        "- NO undefined variables or undefined function calls\n\n"
+        "- NO undefined variables or undefined function calls\n"
+        "- NEVER use is_closed= on add_lwpolyline — the correct kwarg is close=True: msp.add_lwpolyline(points, close=True)\n"
+        "- NEVER truncate code mid-string, mid-bracket, mid-paren, or mid-brace — every opened literal MUST be closed\n\n"
         "Wrap code in ```python ... ``` block. Output ONLY code, no explanation."
     ),
     user_prompt_template=(
@@ -93,7 +95,9 @@ PATTERN_STEPWISE = PromptPattern(
         "- doc = ezdxf.new(dxfversion='R2010') — NEVER ezdxf.enums.new()\n"
         "- NO if __name__ == '__main__':, NO try/except, NO print()\n"
         "- Text: msp.add_text(text, dxfattribs={'insert': (x, y), 'height': h, 'layer': 'TEXT'})\n"
-        "- ALWAYS end with doc.saveas(output_path)\n\n"
+        "- ALWAYS end with doc.saveas(output_path)\n"
+        "- NEVER use is_closed= on add_lwpolyline — the correct kwarg is close=True: msp.add_lwpolyline(points, close=True)\n"
+        "- NEVER truncate code mid-string, mid-bracket, mid-paren, or mid-brace — every opened literal MUST be closed\n\n"
         "Wrap code in ```python ... ``` block. Output ONLY code with step comments."
     ),
     user_prompt_template=(
@@ -136,7 +140,9 @@ PATTERN_REFERENCE = PromptPattern(
         "- Use ONLY msp.add_*() methods: add_line, add_circle, add_arc, add_lwpolyline, add_text\n"
         "- Text: msp.add_text(text, dxfattribs={'insert': (x, y), 'height': h, 'layer': 'TEXT'})\n"
         "- NO if __name__, NO try/except, NO print(), NO undefined variables\n"
-        "- MUST end with doc.saveas(output_path)\n\n"
+        "- MUST end with doc.saveas(output_path)\n"
+        "- NEVER use is_closed= on add_lwpolyline — the correct kwarg is close=True: msp.add_lwpolyline(points, close=True)\n"
+        "- NEVER truncate code mid-string, mid-bracket, mid-paren, or mid-brace — every opened literal MUST be closed\n\n"
         "Wrap code in ```python ... ``` block. Output ONLY executable code."
     ),
     user_prompt_template=(

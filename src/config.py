@@ -18,7 +18,10 @@ def _project_root() -> Path:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=str(_project_root() / ".env"),
+        env_file=(
+            str(_project_root() / ".env"),
+            str(_project_root() / "src" / ".env"),
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -46,6 +49,7 @@ class Settings(BaseSettings):
 
     # Generation runtime controls
     request_timeout_ms: int = Field(default=60000, ge=5000, le=300000)
+    request_timeout_backoff_multiplier: float = Field(default=1.5, ge=1.0, le=4.0)
     inter_request_delay: float = Field(default=1.0, ge=0.0, le=30.0)
 
     # Paths

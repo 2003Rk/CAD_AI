@@ -25,11 +25,12 @@ class GeminiCADClient:
         settings = get_settings()
         self._api_key = api_key or settings.gemini_api_key
         self._model = model or settings.gemini_model
-        self._model_fallbacks = ["gemini-2.5-flash-lite", "gemini-flash-latest"]
+        self._model_fallbacks = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest"]
         self._max_retries = settings.max_retries
         self._retry_delay = settings.retry_delay
         self._max_quota_backoff_seconds = settings.max_quota_backoff_seconds
         self._request_timeout_ms = settings.request_timeout_ms
+        self._request_timeout_backoff_multiplier = settings.request_timeout_backoff_multiplier
         self._inter_request_delay = settings.inter_request_delay
         self._last_request_ts = 0.0
 
@@ -115,10 +116,19 @@ class GeminiCADClient:
 
         raw_response = ""
         for attempt in range(1, self._max_retries + 1):
+            attempt_timeout_ms = _compute_attempt_timeout_ms(
+                base_timeout_ms=self._request_timeout_ms,
+                attempt=attempt,
+                multiplier=self._request_timeout_backoff_multiplier,
+            )
             try:
                 logger.info(
-                    "Gemini request attempt %d/%d (pattern: %s)",
-                    attempt, self._max_retries, prompt_pattern.name,
+                    "Gemini request attempt %d/%d (pattern: %s, model: %s, timeout: %dms)",
+                    attempt,
+                    self._max_retries,
+                    prompt_pattern.name,
+                    self._model,
+                    attempt_timeout_ms,
                 )
                 response = self._client.models.generate_content(
                     model=self._model,
@@ -139,9 +149,9 @@ class GeminiCADClient:
                         automatic_function_calling=types.AutomaticFunctionCallingConfig(
                             disable=True
                         ),
-                        http_options=types.HttpOptions(timeout=self._request_timeout_ms),
+                        http_options=types.HttpOptions(timeout=attempt_timeout_ms),
                         temperature=0.2,
-                        max_output_tokens=8192,
+                        max_output_tokens=65536,
                     ),
                 )
                 raw_response = _response_to_text(response)
@@ -157,6 +167,15 @@ class GeminiCADClient:
                         )
                         self._model = fallback_model
                         continue
+                if _is_deadline_exceeded_error(exc) and attempt >= 2:
+                    fallback_model = _next_fallback_model(self._model, self._model_fallbacks)
+                    if fallback_model:
+                        logger.warning(
+                            "Request hit DEADLINE_EXCEEDED on '%s'; retrying with faster model '%s'",
+                            self._model,
+                            fallback_model,
+                        )
+                        self._model = fallback_model
                 if _is_daily_quota_error(exc):
                     logger.error("Daily free-tier quota exhausted — aborting pipeline.")
                     raise RuntimeError(
@@ -164,7 +183,7 @@ class GeminiCADClient:
                         "1500 req/day for gemini-1.5-flash). "
                         "Enable billing at https://console.cloud.google.com/billing or wait until midnight Pacific time."
                     ) from exc
-                logger.warning("Attempt %d failed: %s", attempt, exc)
+                logger.warning("Attempt %d failed (timeout=%dms): %s", attempt, attempt_timeout_ms, exc)
                 if attempt < self._max_retries:
                     if should_stop and should_stop():
                         return GenerationResult(
@@ -240,6 +259,26 @@ class GeminiCADClient:
             )
 
         if not output_dxf_path.exists():
+            # Give the repair one chance: the generated code may have used a hardcoded path.
+            repaired_code = _repair_generated_code_once(code, "Code executed but no DXF file was created.")
+            if repaired_code and repaired_code != code:
+                logger.info("Auto-repair (no-file) triggered for %s", image_path.name)
+                if output_dxf_path.exists():
+                    try:
+                        output_dxf_path.unlink()
+                    except Exception:
+                        pass
+                repaired_error = _execute_dxf_code(repaired_code, str(output_dxf_path))
+                if not repaired_error and output_dxf_path.exists():
+                    logger.info("Auto-repair (no-file) succeeded for %s", output_dxf_path.name)
+                    return GenerationResult(
+                        success=True,
+                        image_path=image_path,
+                        output_path=output_dxf_path,
+                        pattern=prompt_pattern,
+                        raw_response=raw_response,
+                        extracted_code=repaired_code,
+                    )
             return GenerationResult(
                 success=False,
                 image_path=image_path,
@@ -355,7 +394,18 @@ def _compute_retry_backoff(
         hinted = float(retry_match.group(1))
         return min(max(hinted, base_delay), float(max_backoff))
 
+    if _is_deadline_exceeded_error(exc):
+        # 504 deadline errors often clear with slightly slower pacing.
+        deadline_backoff = base_delay * (2 ** (attempt - 1)) * 1.5
+        return min(deadline_backoff, float(max_backoff))
+
     return min(base_delay * (2 ** (attempt - 1)), float(max_backoff))
+
+
+def _compute_attempt_timeout_ms(*, base_timeout_ms: int, attempt: int, multiplier: float) -> int:
+    """Increase request timeout each attempt to absorb transient model latency."""
+    timeout = int(base_timeout_ms * (multiplier ** (attempt - 1)))
+    return min(timeout, 300000)
 
 
 def _is_model_not_found_error(exc: Exception) -> bool:
@@ -371,6 +421,12 @@ def _is_daily_quota_error(exc: Exception) -> bool:
     """
     msg = str(exc)
     return "PerDayPer" in msg or "GenerateRequestsPerDay" in msg
+
+
+def _is_deadline_exceeded_error(exc: Exception) -> bool:
+    """Return True when upstream timed out before completion."""
+    msg = str(exc).upper()
+    return "DEADLINE_EXCEEDED" in msg or "504" in msg
 
 
 def _next_fallback_model(current: str, fallback_models: list[str]) -> str | None:
@@ -487,20 +543,19 @@ def _preprocess_code(code: str, output_path: str) -> str:
             result_lines.extend(body_lines)
         code = "\n".join(result_lines)
 
-    # Replace hardcoded output paths with variable
-    code = _re.sub(
-        r'''['"]([^'"]*\.dxf)['"]\s*\)\s*$''',
-        lambda m: f"output_path)" if "save" in code[max(0, code.find(m.group(0)) - 40):code.find(m.group(0))] else m.group(0),
-        code,
-        flags=_re.MULTILINE,
-    )
+    # Fix hardcoded DXF output paths in saveas/save calls — replace with output_path variable.
+    # Handles: doc.saveas("output.dxf"), doc.saveas('drawing.dxf'), doc.save("file.dxf"), etc.
+    code = _re.sub(r'(\.saveas|\.save)\(\s*[\'"][^\'"]*\.dxf[\'"]\s*\)', r'\1(output_path)', code)
 
-    # Fix deprecated set_pos → use dxf.insert
+    # Replace deprecated set_pos → use dxf.insert
     code = code.replace(".set_pos(", ".dxf.__setattr__('insert', ")
 
     # Fix ezdxf.enums.new() → ezdxf.new() (Gemini confuses the submodule)
     code = _re.sub(r'ezdxf\.enums\.new\(', 'ezdxf.new(', code)
     code = _re.sub(r'ezdxf\.units\.new\(', 'ezdxf.new(', code)
+
+    # Fix is_closed= → close= (wrong kwarg name; ezdxf uses close=)
+    code = _re.sub(r'\bis_closed\s*=\s*(True|False)', lambda m: f'close={m.group(1)}', code)
 
     return code
 
@@ -552,6 +607,12 @@ def _repair_generated_code_once(code: str, exec_error: str) -> str | None:
     This function intentionally applies only small, safe transformations.
     """
     repaired = code
+
+    # Fix is_closed= → close= (wrong kwarg name; ezdxf uses close=)
+    repaired = re.sub(r'\bis_closed\s*=\s*(True|False)', lambda m: f'close={m.group(1)}', repaired)
+
+    # Fix hardcoded DXF paths in saveas/save calls (Gemini often ignores the output_path param)
+    repaired = re.sub(r'(\.saveas|\.save)\(\s*[\'"][^\'"]*\.dxf[\'"]\s*\)', r'\1(output_path)', repaired)
 
     # Normalize mistaken save method variants.
     repaired = repaired.replace("doc.save(output_path)", "doc.saveas(output_path)")
